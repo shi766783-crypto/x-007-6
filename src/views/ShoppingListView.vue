@@ -13,6 +13,39 @@ const selected = ref(new Set())
 const active = computed(() => shopping.activeItems)
 const purchased = computed(() => shopping.purchasedItems)
 
+// 预算编辑
+const editingBudget = ref(false)
+const budgetInput = ref('')
+
+const budgetPercent = computed(() =>
+  Math.min(100, Math.round(shopping.budgetUsageRatio * 100)),
+)
+const budgetBarColor = computed(() => {
+  if (shopping.budgetStatus === 'over') return 'var(--danger)'
+  if (shopping.budgetStatus === 'near') return 'var(--warn)'
+  return 'var(--primary)'
+})
+const budgetCardClass = computed(() => `budget-card ${shopping.budgetStatus}`)
+
+function startEditBudget() {
+  budgetInput.value = shopping.hasBudget ? String(shopping.monthlyBudget) : ''
+  editingBudget.value = true
+}
+
+function saveBudget() {
+  const value = Number(budgetInput.value)
+  if (!Number.isFinite(value) || value < 0) {
+    alert('请输入有效的预算金额')
+    return
+  }
+  shopping.setBudget(value)
+  editingBudget.value = false
+}
+
+function cancelEditBudget() {
+  editingBudget.value = false
+}
+
 function toggle(id) {
   const s = new Set(selected.value)
   s.has(id) ? s.delete(id) : s.add(id)
@@ -53,6 +86,61 @@ function fmtDate(iso) {
     </div>
 
     <p class="muted hint">系统会对比本周食谱所需食材总量与当前库存，自动计算缺口数量。</p>
+
+    <!-- 月度采购预算 -->
+    <div :class="budgetCardClass">
+      <div class="budget-head">
+        <div class="budget-title">💰 {{ shopping.currentMonthLabel }}买菜预算</div>
+        <BaseButton v-if="!editingBudget" size="sm" variant="ghost" @click="startEditBudget">
+          {{ shopping.hasBudget ? '调整预算' : '设置预算' }}
+        </BaseButton>
+      </div>
+
+      <!-- 设置/编辑预算 -->
+      <div v-if="editingBudget" class="budget-edit">
+        <span class="unit">¥</span>
+        <input
+          v-model="budgetInput"
+          type="number"
+          min="0"
+          step="10"
+          placeholder="请输入本月买菜额度"
+          @keyup.enter="saveBudget"
+        />
+        <BaseButton size="sm" @click="saveBudget">保存</BaseButton>
+        <BaseButton size="sm" variant="ghost" @click="cancelEditBudget">取消</BaseButton>
+      </div>
+
+      <template v-else-if="shopping.hasBudget">
+        <div class="budget-nums">
+          <span class="spent">¥{{ shopping.monthlySpend.toFixed(1) }}</span>
+          <span class="muted small">/ ¥{{ shopping.monthlyBudget.toFixed(1) }}</span>
+          <span class="remaining" :class="shopping.budgetStatus">
+            {{
+              shopping.monthlyRemaining >= 0
+                ? `剩余可花 ¥${shopping.monthlyRemaining.toFixed(1)}`
+                : `已超支 ¥${Math.abs(shopping.monthlyRemaining).toFixed(1)}`
+            }}
+          </span>
+        </div>
+        <div class="budget-bar">
+          <div
+            class="budget-bar-fill"
+            :style="{ width: budgetPercent + '%', background: budgetBarColor }"
+          ></div>
+        </div>
+        <div v-if="shopping.budgetStatus === 'near'" class="budget-tip warn">
+          ⚠️ 本月预算已使用 {{ budgetPercent }}%，接近上限，注意控制采购！
+        </div>
+        <div v-else-if="shopping.budgetStatus === 'over'" class="budget-tip danger">
+          🛑 本月买菜已超支 {{ Math.abs(shopping.monthlyRemaining).toFixed(1) }} 元，请削减非必要采购！
+        </div>
+      </template>
+
+      <div v-else class="muted small budget-empty">
+        尚未设置每月买菜预算，设置后可实时查看剩余可花金额，避免月底超支。
+      </div>
+    </div>
 
     <div v-if="active.length" class="toolbar card">
       <BaseButton size="sm" @click="markSelected" :disabled="!selected.size">
@@ -112,6 +200,95 @@ function fmtDate(iso) {
 }
 .hint {
   margin-bottom: 16px;
+}
+.budget-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--primary);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.budget-card.near {
+  border-left-color: var(--warn);
+  background: var(--warn-light);
+}
+.budget-card.over {
+  border-left-color: var(--danger);
+  background: var(--danger-light);
+}
+.budget-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.budget-title {
+  font-weight: 600;
+}
+.budget-nums {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.budget-nums .spent {
+  font-size: 22px;
+  font-weight: 700;
+}
+.budget-nums .remaining {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary-dark);
+}
+.budget-nums .remaining.near {
+  color: var(--warn);
+}
+.budget-nums .remaining.danger {
+  color: var(--danger);
+}
+.budget-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.budget-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.budget-tip {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.budget-tip.warn {
+  color: #e65100;
+}
+.budget-tip.danger {
+  color: #c62828;
+}
+.budget-empty {
+  margin: 0;
+}
+.budget-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.budget-edit .unit {
+  font-weight: 600;
+  color: var(--text-2);
+}
+.budget-edit input {
+  width: 160px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
 }
 .toolbar {
   display: flex;

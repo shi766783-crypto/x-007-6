@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useInventoryStore } from '@/stores/inventory'
 import { useStatsStore } from '@/stores/stats'
 import { useUserStore } from '@/stores/user'
+import { useShoppingListStore } from '@/stores/shoppingList'
 import BaseTag from '@/components/common/BaseTag.vue'
 import BaseEmpty from '@/components/common/BaseEmpty.vue'
 import { expiryDateKey } from '@/utils/date'
@@ -10,12 +11,32 @@ import { expiryDateKey } from '@/utils/date'
 const inventory = useInventoryStore()
 const stats = useStatsStore()
 const user = useUserStore()
+const shopping = useShoppingListStore()
 
 const expired = computed(() => inventory.expiredItems)
 const near = computed(() => inventory.nearExpiryItems)
 const priority = computed(() =>
   [...inventory.expiredItems, ...inventory.nearExpiryItems].sort((a, b) => a.remain - b.remain),
 )
+
+// 月度预算：接近上限（≥80%）或已超支时在首页提示
+const budgetAlert = computed(() => {
+  if (shopping.budgetStatus === 'over') {
+    return {
+      cls: 'danger',
+      icon: '🛑',
+      text: `${shopping.currentMonthLabel}买菜预算已超支 ¥${Math.abs(shopping.monthlyRemaining).toFixed(1)}（已花 ¥${shopping.monthlySpend.toFixed(1)} / 预算 ¥${shopping.monthlyBudget.toFixed(1)}），请削减非必要采购！`,
+    }
+  }
+  if (shopping.budgetStatus === 'near') {
+    return {
+      cls: 'warn',
+      icon: '⚠️',
+      text: `${shopping.currentMonthLabel}买菜预算已使用 ${Math.round(shopping.budgetUsageRatio * 100)}%，仅剩 ¥${shopping.monthlyRemaining.toFixed(1)} 可花，注意控制采购。`,
+    }
+  }
+  return null
+})
 </script>
 
 <template>
@@ -24,6 +45,12 @@ const priority = computed(() =>
       <h2>你好，{{ user.name }} 👋</h2>
       <p class="muted">合理规划每一餐，让食材不再被浪费。</p>
     </div>
+
+    <router-link v-if="budgetAlert" to="/shopping" class="budget-alert" :class="budgetAlert.cls">
+      <span class="icon">{{ budgetAlert.icon }}</span>
+      <span class="text">{{ budgetAlert.text }}</span>
+      <span class="go">查看 →</span>
+    </router-link>
 
     <div class="grid grid-3 alert-row">
       <div class="alert-card danger">
@@ -104,6 +131,37 @@ const priority = computed(() =>
 }
 .hero h2 {
   font-size: 22px;
+}
+.budget-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+.budget-alert.warn {
+  background: var(--warn-light);
+  border-color: #ffcc80;
+  color: #e65100;
+}
+.budget-alert.danger {
+  background: var(--danger-light);
+  border-color: #ef9a9a;
+  color: #c62828;
+}
+.budget-alert .icon {
+  font-size: 18px;
+}
+.budget-alert .text {
+  flex: 1;
+}
+.budget-alert .go {
+  white-space: nowrap;
+  font-weight: 600;
 }
 .alert-row {
   margin-bottom: 16px;
