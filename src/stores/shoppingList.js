@@ -6,11 +6,16 @@ import { useMealPlanStore } from './mealPlan'
 
 const LIST_KEY = 'shopping-list'
 const HISTORY_KEY = 'shopping-history'
+const BUDGET_KEY = 'shopping-monthly-budget'
+
+// 预算预警阈值：已花达到预算的 80% 视为接近上限
+const BUDGET_WARN_RATIO = 0.8
 
 export const useShoppingListStore = defineStore('shoppingList', {
   state: () => ({
     items: read(LIST_KEY, []),
     history: read(HISTORY_KEY, []), // 采购记录 [{ id, date, items, total }]
+    monthlyBudget: read(BUDGET_KEY, 0), // 每月买菜预算（元），0 表示未设置
   }),
 
   getters: {
@@ -30,6 +35,32 @@ export const useShoppingListStore = defineStore('shoppingList', {
         .filter((h) => new Date(h.date) >= start)
         .reduce((s, h) => s + Number(h.total || 0), 0)
     },
+    // 本月已花：按采购完成日期归属自然月自动累加
+    monthlySpend(state) {
+      const now = new Date()
+      return state.history
+        .filter((h) => {
+          const d = new Date(h.date)
+          return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+        })
+        .reduce((s, h) => s + Number(h.total || 0), 0)
+    },
+    // 本月剩余可花金额（超支时为负数）
+    monthlyRemaining() {
+      return Number(this.monthlyBudget || 0) - this.monthlySpend
+    },
+    // 预算使用比例
+    budgetUsedRatio() {
+      const budget = Number(this.monthlyBudget || 0)
+      return budget > 0 ? this.monthlySpend / budget : 0
+    },
+    // 预算状态：unset 未设置 | ok 正常 | near 接近上限 | over 已超支
+    budgetStatus() {
+      if (!(Number(this.monthlyBudget) > 0)) return 'unset'
+      if (this.monthlySpend > this.monthlyBudget) return 'over'
+      if (this.budgetUsedRatio >= BUDGET_WARN_RATIO) return 'near'
+      return 'ok'
+    },
     // 缺口总额（未采购项）
     totalGap: (state) =>
       state.items.filter((i) => !i.purchased).reduce((s, i) => s + Number(i.gap || 0), 0),
@@ -39,6 +70,22 @@ export const useShoppingListStore = defineStore('shoppingList', {
     persist() {
       write(LIST_KEY, this.items)
       write(HISTORY_KEY, this.history)
+    },
+
+    // 设置/调整每月买菜预算（随时可调，传 0 可清除）
+    setBudget(amount) {
+      const value = Number(amount)
+      this.monthlyBudget = Number.isFinite(value) && value > 0 ? Math.round(value * 100) / 100 : 0
+      write(BUDGET_KEY, this.monthlyBudget)
+    },
+
+    // 记录单个食材的报价，并即时持久化，避免刷新后丢失
+    updatePrice(id, price) {
+      const item = this.items.find((i) => i.id === id)
+      if (!item) return
+      const value = Number(price)
+      item.price = Number.isFinite(value) && value > 0 ? value : 0
+      write(LIST_KEY, this.items)
     },
 
     // 根据本周食谱计划与库存生成采购清单

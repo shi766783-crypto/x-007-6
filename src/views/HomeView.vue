@@ -5,6 +5,7 @@ import { useStatsStore } from '@/stores/stats'
 import { useUserStore } from '@/stores/user'
 import BaseTag from '@/components/common/BaseTag.vue'
 import BaseEmpty from '@/components/common/BaseEmpty.vue'
+import BudgetPanel from '@/components/shopping/BudgetPanel.vue'
 import { expiryDateKey } from '@/utils/date'
 
 const inventory = useInventoryStore()
@@ -38,6 +39,10 @@ const priority = computed(() =>
         <div class="num">{{ inventory.items.length }}</div>
         <div class="txt">库存总种类</div>
       </div>
+    </div>
+
+    <div class="budget-wrap">
+      <BudgetPanel variant="compact" />
     </div>
 
     <div class="card">
@@ -106,6 +111,9 @@ const priority = computed(() =>
   font-size: 22px;
 }
 .alert-row {
+  margin-bottom: 16px;
+}
+.budget-wrap {
   margin-bottom: 16px;
 }
 .alert-card {
